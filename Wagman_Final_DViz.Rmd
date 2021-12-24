@@ -1,0 +1,433 @@
+---
+title: "Data Viz FINAL!"
+subtitle: "Data Visualization (STAT 302)"
+author: "Anna Wagman"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    highlight: "tango"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Introduction:
+As an avid Netflix consumer and lover of entertainment, I examined data about the titles available of Netflix. Throughout these visualizations, I explore the relative amounts of Movies vs TV Shows, and then compare specific variables between the two such as "listed_in" and "duration". I created two distinct visualizations displaying the streaming availability around the world. I extract specific variables such as "date_added" and "country" to explore metrics and changes over time. Throughout my seven explorations, I will highlight key data and statistics about the content on Netflix**
+<br>
+<br>
+**Data source: <https://www.kaggle.com/shivamb/netflix-shows>**
+
+
+
+```{r, message=FALSE, include = FALSE, warning=FALSE}
+#Load packages:
+
+library(tidyverse)
+library(janitor)
+library(skimr)
+library(ggplot2)
+library(RColorBrewer)
+library(lubridate)
+library(dplyr)
+library(ggmap)
+library(viridis)
+library(cowplot)
+
+#import data:
+netflix <- read_csv("data/netflix_titles.csv")
+
+#Make into tibble to look at data
+head(netflix)
+ncol(netflix)
+nrow(netflix)
+n_distinct(netflix)
+colnames(netflix)
+str(netflix)
+```
+
+# Visualization 1: Total Movies & TV Shows per Country
+### Q1: What Countries have the most content? Is there a large disparity? 
+
+```{r, message = FALSE, warning=FALSE, include = FALSE}
+#add n = amount of TV + Movies in each country
+#create subset of 10 countries with highest n, most titles
+#graph in descending order with graphics (color, size, labels)
+
+
+countries_plot <- netflix %>%
+  filter (!str_detect (country, ",")) %>% #multiple countries seperated by commas
+  group_by (country) %>% #group by country
+  count() %>% #add total in each group = country
+  arrange(desc(n)) %>% #descending order (decreasing)
+  head(20) %>% #select n for highest 20
+  
+  ggplot() + 
+  geom_col(fill = "#C60B0B", color = "black", #color 
+    aes(y = reorder(country, n), x = n)) + #order highest -> lowest
+  labs( 
+    title = "Movies & TV Shows per Country", #labels
+    x = "Number of Titles",
+    y = "Country"
+  ) +
+  geom_label(aes(y = reorder(country,n), x = n, label = n), size = 2.3) + #label n on each bar
+  theme_classic() 
+
+```
+
+```{r, message = FALSE, warning=FALSE}
+countries_plot
+```
+
+## Plot 1b. World Map of Available content
+
+```{r, message=FALSE, include=FALSE, warning=FALSE}
+#calculate number per country
+netflix_map <- netflix %>% 
+  filter(!(is.na(country) | country == "")) %>% 
+  group_by(country) %>% 
+  summarise(number_of_titles = length(unique(title)), .groups = "drop") 
+
+#map world
+worldmap_plot <- map_data("world")
+
+#change country names to match
+netflix_map$country <- recode(netflix_map$country, 
+                             "United States" = "USA",
+                             "United Kingdom" = "UK")
+  
+#join netflix data and world map data
+netflix_map <- full_join(netflix_map, worldmap_plot, by = c("country" = "region"))
+
+#make plot!
+netflix_world_map <- ggplot(
+  data = netflix_map,
+  aes(a = country, b = number_of_titles)
+  ) +
+  geom_polygon(
+    aes(x = long, y = lat,
+      group = group, fill = number_of_titles
+    )
+  ) +
+  scale_fill_viridis(discrete = FALSE) +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank()
+    ) +
+  ylim(-50, 90) +
+  theme_minimal()
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+netflix_world_map
+```
+
+
+# Visualization 2: Movies vs TV shows 
+
+### Q2. Does Netflix have more Movies or TV Shows? What is the difference?
+
+
+```{r, message = FALSE, warning=FALSE, include=FALSE}
+#count number of movies and TV shows 
+#create Pie chart to compare the two 
+
+Amount_MvT <- netflix %>%
+group_by(type) %>% #group by Movie and TV Show 
+summarize(number_of_each = n()) #add up each
+```
+
+```{r, message = FALSE, warning=FALSE}
+Amount_MvT
+```
+
+```{r, message = FALSE, warning=FALSE, include = FALSE}
+MvT_plot <- ggplot(Amount_MvT, aes(x = "", y = number_of_each, fill = type)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = number_of_each), 
+            position = position_stack(vjust = .5)) +
+  labs(
+    title = "Netflix: Amount of Movies vs TV shows",
+    y = "Number of each",
+    x = NULL
+  ) +
+  scale_fill_manual (values = c("#61DCDE", "#F57CF4")) +
+  theme_minimal()
+```
+
+```{r, message = FALSE, warning=FALSE}
+MvT_plot
+```
+
+
+# Visualization 3: Amount of titles over time 
+
+### Q3. How many titles get added each year? Has it been increasing or decreasing over time?
+
+```{r, message = FALSE, warning=FALSE, include = FALSE}
+##read dates
+netflix$date_added <- as.Date(netflix$date_added,format = '%B %d, %Y')
+
+#Find amount of TV shows and Movies added each year
+#Plot amount of (Movies & TV shows)  by (time) with a scatter plot
+mvt_added <- netflix %>%
+group_by(type,date_added)%>%
+summarise(number_released=n())%>%
+mutate(total_shows=cumsum(number_released))
+head(mvt_added)
+```
+
+
+```{r, message = FALSE, warning=FALSE, include = FALSE}
+added_plot <- ggplot(mvt_added,aes(date_added,total_shows,color = type)) +
+geom_line() +
+scale_x_date(breaks = '1 years',date_labels = '%Y',limits = as.Date(c("2007-01-01","2023-01-01"))) +
+theme(plot.title = element_text(size = 5),
+      axis.text.x = element_text(size = .5),
+      axis.text.y = element_text(size = 5),
+      axis.title = element_text(size = 5),
+      legend.text=element_text(size = 1),
+      legend.title=element_text(size = 5)
+      ) +
+  labs(
+    x = "year",
+    y ="Amount of titles added",
+    title="Amount of Movies vs TV Added per year"
+    ) +
+  theme_minimal()
+```
+```{r, warning=FALSE, message=FALSE}
+added_plot
+```
+
+
+# Visualization 4: Genres of Movies and TV Shows 
+
+### Q4. What are the most common genres of Netflix? Are the Genres different for Movies vs TV Shows? 
+
+```{r, message = FALSE, warning=FALSE, include = FALSE}
+#select genre = listed_in 
+#count how many in each 
+#select 10-15 most common Genres to plot 
+
+MvT_Genres <- netflix %>%
+  select(listed_in) %>%
+  mutate(listed_in = str_split(listed_in,','))%>%
+  unnest(listed_in) %>%
+  group_by(listed_in) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(15) %>%
+  
+  ggplot() + 
+  geom_col(aes(y = reorder(listed_in,n), x = n, fill = listed_in)) +
+  labs(title = "Genres of Movies and TV Shows",
+     x = "Amount of Titles",
+     y = "Genre") +
+  geom_label(aes(y = reorder(listed_in, n), x = n, label = n), size = 2.2) +
+  theme_minimal() 
+
+```
+```{r, message = FALSE, warning=FALSE}
+MvT_Genres
+```
+
+
+## Plot 4b: Genres of Movies vs TV Shows (compared)
+
+```{r, message = FALSE, warning=FALSE, include = FALSE}
+#filter by type = "Movie" and select genre = "listed_in"
+#count number of each genre 
+#plot number of each genre in descending order 
+
+#select movies and group by genre
+Movie_Genres <- netflix %>%
+  filter(type == "Movie") %>%
+  mutate(listed_in = str_split(listed_in,','))%>%
+  unnest(listed_in) %>%
+  group_by(listed_in) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(18) %>%
+  
+#Plot amount of each genre of Movie
+  ggplot() + 
+  geom_col(fill = "lightblue", color = "black",
+    aes(y = reorder(listed_in, n), x = n)) +
+  labs(
+    title = "Movie Genres",
+    x = "Amount of Movies",
+    y = "Genre"
+  ) +
+  geom_label(aes(y = reorder(listed_in, n), x = n, label = n), size = 2.2) +
+  theme_minimal()
+  
+```
+
+```{r, message = FALSE, warning=FALSE, include=FALSE}
+#filter by type = "tv show"
+#select genre = listed_in, add up n 
+
+TV_Genres <- netflix %>%
+  filter(type == "TV Show") %>%
+  mutate(listed_in = str_split(listed_in,','))%>%
+  unnest(listed_in) %>%
+  group_by(listed_in) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(18) %>%
+  
+#graph amount each genre of TV Show
+  ggplot() + 
+  geom_col(fill = "lightpink", color = "black",
+    aes(y = reorder(listed_in, n), x = n)) +
+  labs(
+    title = "TV Show Genres",
+    x = "Amount of Shows",
+    y = "Genre"
+  ) +
+  geom_label(aes(y = reorder(listed_in, n), x = n, label = n), size = 2.2) +
+  theme_minimal()
+
+
+```
+
+```{r, message = FALSE, warning=FALSE}
+Movie_Genres
+TV_Genres
+```
+
+
+
+# Visualization 5: Release Date vs Date Added
+### Q5. How long after something is released is it added to Netflix? Is it usually within the year?
+
+```{r, message = FALSE, warning=FALSE, include=FALSE}
+#mutate data to subtract the dates
+netflix_dates <- read_csv("data/netflix_titles.csv") %>%
+  mutate(date_added = mdy(date_added)) %>% clean_names() %>%
+  mutate(year_diff = year(date_added) - release_year)
+
+
+netflix_dates_tibble <- netflix_dates %>% 
+  count(year_diff, sort = T)
+
+as.tibble(netflix_dates_tibble)
+
+
+```
+
+
+```{r, message = FALSE, warning=FALSE, include=FALSE}
+library(RColorBrewer)
+
+#mutate data to subtract the dates
+netflix_dates2 <- read_csv("data/netflix_titles.csv") %>%
+  mutate(date_added = mdy(date_added)) %>% clean_names() %>%
+  mutate(year_diff = year(date_added) - release_year) %>%
+  count(year_diff) %>%
+  arrange(desc(n)) %>%
+  head(25) %>%
+  
+  ggplot() +
+  geom_col(
+    aes(fill = year_diff, x = reorder(year_diff, n), y = n)) +
+  labs(
+    title = "Release Date vs Year Added",
+    x = "Difference in years (added-release)",
+    y = "Amount of titles"
+  ) +
+  theme_minimal()
+
+ 
+
+
+
+```
+
+```{r, message = FALSE, warning=FALSE}
+netflix_dates2 
+```
+
+# Visualization 6: Notable Directors & Actresses/Actors
+
+### Q6. Who are the most frequence Directors on Netflix? With how many films? Who are the most frequent Actresses and Actors?
+```{r, message = FALSE, warning=FALSE, include=FALSE}
+directors <- netflix %>%
+  filter(!str_detect (director, ", ")) %>%
+  group_by(director) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(15) %>%
+  
+  ggplot() +
+  geom_col(fill = "#78DB79", color = "black",
+           aes(y = reorder(director, n), x = n)) +
+  labs(
+    title = "Directors",
+    x = "Number of titles",
+    y = "Director"
+  ) +
+  theme_minimal() +
+  geom_label(aes(y = reorder(director, n), x = n, label = n), size = 2.2)
+```
+
+```{r, message = FALSE, warning=FALSE, include=FALSE}
+#most common actors and actresses
+actors <- netflix %>%
+  mutate(cast = str_split(cast, ", ")) %>%
+  unnest(cast) %>%
+  group_by(cast) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(15)
+
+actors_removeNA <- actors[-1, ] 
+  
+  
+actors_plot <- ggplot(actors_removeNA) +
+  geom_col(fill = "#B080DB", color = "black",
+           aes(y = reorder(cast, n), x = n)) +
+  labs(
+    title = "Actresses & Actors",
+    x = "Number of titles",
+    y = "Actress / Actor"
+    ) +
+  theme_minimal() +
+  geom_label(aes(y = reorder(cast, n), x = n, label = n), size = 2.2) 
+```
+
+```{r, message = FALSE, warning=FALSE}
+plot_grid(actors_plot, directors) 
+```
+
+# Visualization 7. TV Shows with the most seasons
+### Q7. Which TV shows on netflix have the most seasons? How many seasons are there of that show?
+
+```{r, message = FALSE, include = FALSE, warning = FALSE}
+netflix_seasons <- netflix %>%
+  filter(type == "TV Show") %>%
+  select(title, duration) %>%
+  mutate(duration = extract_numeric(duration)) %>%
+  arrange(desc(duration)) %>%
+  head(15) %>%
+  
+  ggplot() +
+  geom_col(fill = "#F9F054", color = "red",
+    aes(y = reorder(title, duration), x = duration)) +
+  labs(
+    title = "Longest Running TV Shows",
+    x = "Amount of Seasons",
+    y = "TV Show"
+  ) +
+  geom_label(aes(y = reorder(title, duration), x = duration, label = duration), size = 2.2) +
+  theme_minimal() 
+```
+
+```{r, warning = FALSE, message = FALSE}
+netflix_seasons
+```
+
+
